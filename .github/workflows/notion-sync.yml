@@ -2,7 +2,6 @@ name: Sync Notion Events
 
 on:
   workflow_dispatch:
-
   schedule:
     - cron: "0 * * * *"
 
@@ -14,168 +13,63 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # -------------------------------------------------------
-      # CHECKOUT
-      # -------------------------------------------------------
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
-
-      # -------------------------------------------------------
-      # NODE
-      # -------------------------------------------------------
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-
-      # -------------------------------------------------------
-      # FETCH FROM NOTION
-      # -------------------------------------------------------
-
       - name: Fetch events from Notion
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATA_SOURCE_ID: ${{ secrets.NOTION_DATA_SOURCE_ID }}
-
         run: |
-
           node <<'EOF'
-
           const fs = require("fs");
 
-
-          /*
-          =======================================================
-          CONFIG
-          =======================================================
-          */
-
-          const NOTION_VERSION =
-            "2026-03-11";
-
+          const NOTION_VERSION = "2026-03-11";
           const DATA_SOURCE_ID =
             process.env.NOTION_DATA_SOURCE_ID;
 
           const TOKEN =
             process.env.NOTION_TOKEN;
 
+          async function main() {
 
-          if (!TOKEN) {
-            throw new Error(
-              "Missing NOTION_TOKEN"
-            );
-          }
+            const events = [];
+            let cursor = undefined;
 
-          if (!DATA_SOURCE_ID) {
-            throw new Error(
-              "Missing NOTION_DATA_SOURCE_ID"
-            );
-          }
+            do {
 
+              const body = {
+                page_size: 100
+              };
 
-          /*
-          =======================================================
-          NOTION REQUEST
-          =======================================================
-          */
-
-          async function notionRequest(
-            url,
-            options = {},
-            retries = 5
-          ) {
-
-            for (
-              let attempt = 1;
-              attempt <= retries;
-              attempt++
-            ) {
-
-              const response =
-                await fetch(
-                  url,
-                  {
-                    ...options,
-
-                    headers: {
-                      "Authorization":
-                        `Bearer ${TOKEN}`,
-
-                      "Content-Type":
-                        "application/json",
-
-                      "Notion-Version":
-                        NOTION_VERSION,
-
-                      ...(options.headers || {})
-                    }
-                  }
-                );
-
-
-              /*
-              ---------------------------------------------------
-              RATE LIMIT
-              ---------------------------------------------------
-              */
-
-              if (
-                response.status === 429
-              ) {
-
-                const retryAfter =
-                  Number(
-                    response.headers.get(
-                      "retry-after"
-                    )
-                  ) || 2;
-
-                console.log(
-                  `Rate limited. Waiting ${retryAfter}s...`
-                );
-
-                await sleep(
-                  retryAfter * 1000
-                );
-
-                continue;
+              if (cursor) {
+                body.start_cursor = cursor;
               }
 
+              const response = await fetch(
+                `https://api.notion.com/v1/data_sources/${DATA_SOURCE_ID}/query`,
+                {
+                  method: "POST",
 
-              /*
-              ---------------------------------------------------
-              SERVER ERROR
-              ---------------------------------------------------
-              */
+                  headers: {
+                    "Authorization":
+                      `Bearer ${TOKEN}`,
 
-              if (
-                response.status >= 500 &&
-                attempt < retries
-              ) {
+                    "Content-Type":
+                      "application/json",
 
-                const wait =
-                  attempt * 2000;
+                    "Notion-Version":
+                      NOTION_VERSION
+                  },
 
-                console.log(
-                  `Notion server error ${response.status}. Retrying in ${wait}ms...`
-                );
-
-                await sleep(wait);
-
-                continue;
-              }
-
-
-              /*
-              ---------------------------------------------------
-              OTHER ERRORS
-              ---------------------------------------------------
-              */
+                  body: JSON.stringify(body)
+                }
+              );
 
               if (!response.ok) {
 
@@ -187,462 +81,87 @@ jobs:
                 );
               }
 
-
-              return response.json();
-            }
-
-
-            throw new Error(
-              `Notion request failed after ${retries} attempts`
-            );
-          }
-
-
-          /*
-          =======================================================
-          SLEEP
-          =======================================================
-          */
-
-          function sleep(ms) {
-
-            return new Promise(
-              resolve =>
-                setTimeout(
-                  resolve,
-                  ms
-                )
-            );
-          }
-
-
-          /*
-          =======================================================
-          MAIN
-          =======================================================
-          */
-
-          async function main() {
-
-            const events = [];
-
-            let cursor =
-              undefined;
-
-
-            /*
-            -----------------------------------------------------
-            FETCH DATABASE
-            -----------------------------------------------------
-            */
-
-            do {
-
-              const body = {
-                page_size: 100
-              };
-
-
-              if (cursor) {
-
-                body.start_cursor =
-                  cursor;
-
-              }
-
-
               const data =
-                await notionRequest(
+                await response.json();
 
-                  `https://api.notion.com/v1/data_sources/${DATA_SOURCE_ID}/query`,
-
-                  {
-                    method: "POST",
-
-                    body:
-                      JSON.stringify(body)
-                  }
-
-                );
-
-
-              for (
-                const page
-                of data.results || []
-              ) {
-
-                const event =
-                  convertPageToEvent(
-                    page
-                  );
-
-
-                console.log(
-                  `Fetching images: ${event.Name || page.id}`
-                );
-
-
-                /*
-                -------------------------------------------------
-                FETCH ALL PAGE IMAGES
-                -------------------------------------------------
-                */
-
-                event.ContentImages =
-                  await getPageImages(
-                    page.id
-                  );
-
-
-                console.log(
-                  `  Found ${event.ContentImages.length} images`
-                );
-
+              for (const page of data.results || []) {
 
                 events.push(
-                  event
+                  convertPageToEvent(page)
                 );
 
-
-                /*
-                -------------------------------------------------
-                SMALL DELAY
-                -------------------------------------------------
-                */
-
-                await sleep(150);
               }
-
 
               cursor =
                 data.has_more
                   ? data.next_cursor
                   : undefined;
 
-
             } while (cursor);
-
-
-            /*
-            -----------------------------------------------------
-            WRITE JSON
-            -----------------------------------------------------
-            */
 
             fs.mkdirSync(
               "data",
-              {
-                recursive: true
-              }
+              { recursive: true }
             );
 
-
             fs.writeFileSync(
-
               "data/events.json",
-
               JSON.stringify(
                 events,
                 null,
                 2
               ) + "\n"
-
             );
-
 
             console.log(
               `Synced ${events.length} events`
             );
-
           }
 
-
-          /*
-          =======================================================
-          GET ALL IMAGES FROM PAGE
-          =======================================================
-          */
-
-          async function getPageImages(
-            pageId
-          ) {
-
-            const images = [];
-
-
-            /*
-            -----------------------------------------------------
-            RECURSIVE BLOCK WALKER
-            -----------------------------------------------------
-            */
-
-            async function fetchBlocks(
-              blockId
-            ) {
-
-              let cursor =
-                undefined;
-
-
-              do {
-
-                const url =
-                  new URL(
-
-                    `https://api.notion.com/v1/blocks/${blockId}/children`
-
-                  );
-
-
-                url.searchParams.set(
-                  "page_size",
-                  "100"
-                );
-
-
-                if (cursor) {
-
-                  url.searchParams.set(
-                    "start_cursor",
-                    cursor
-                  );
-
-                }
-
-
-                const data =
-                  await notionRequest(
-
-                    url.toString(),
-
-                    {
-                      method: "GET"
-                    }
-
-                  );
-
-
-                for (
-                  const block
-                  of data.results || []
-                ) {
-
-
-                  /*
-                  =================================================
-                  IMAGE BLOCK
-                  =================================================
-                  */
-
-                  if (
-                    block.type === "image"
-                  ) {
-
-                    const image =
-                      block.image;
-
-
-                    if (!image) {
-                      continue;
-                    }
-
-
-                    /*
-                    ------------------------------------------------
-                    NOTION UPLOADED IMAGE
-                    ------------------------------------------------
-                    */
-
-                    if (
-                      image.type === "file" &&
-                      image.file?.url
-                    ) {
-
-                      images.push(
-                        image.file.url
-                      );
-
-                    }
-
-
-                    /*
-                    ------------------------------------------------
-                    EXTERNAL IMAGE
-                    ------------------------------------------------
-                    */
-
-                    else if (
-                      image.type === "external" &&
-                      image.external?.url
-                    ) {
-
-                      images.push(
-                        image.external.url
-                      );
-
-                    }
-
-                  }
-
-
-                  /*
-                  =================================================
-                  RECURSIVE CHILD BLOCKS
-                  =================================================
-
-                  This catches:
-
-                  Column List
-                  ├── Column
-                  │   ├── Image
-                  │   └── Image
-                  │
-                  └── Column
-                      ├── Image
-                      └── Image
-
-                  Also works with:
-
-                  Toggle
-                  Callout
-                  Synced blocks
-                  Nested blocks
-                  etc.
-                  =================================================
-                  */
-
-                  if (
-                    block.has_children
-                  ) {
-
-                    await fetchBlocks(
-                      block.id
-                    );
-
-                  }
-
-                }
-
-
-                cursor =
-                  data.has_more
-                    ? data.next_cursor
-                    : undefined;
-
-
-              } while (cursor);
-
-            }
-
-
-            /*
-            -----------------------------------------------------
-            START FROM PAGE
-            -----------------------------------------------------
-            */
-
-            await fetchBlocks(
-              pageId
-            );
-
-
-            /*
-            -----------------------------------------------------
-            REMOVE DUPLICATES
-            -----------------------------------------------------
-            */
-
-            return [
-              ...new Set(images)
-            ];
-
-          }
-
-
-          /*
-          =======================================================
-          CONVERT NOTION PAGE
-          =======================================================
-          */
-
-          function convertPageToEvent(
-            page
-          ) {
+          function convertPageToEvent(page) {
 
             const properties =
               page.properties || {};
 
-
             return {
-
-              /*
-              ---------------------------------------------------
-              DATABASE PROPERTIES
-              ---------------------------------------------------
-              */
 
               Name:
                 getPropertyValue(
                   properties.Name
                 ),
 
-
               Date:
                 getPropertyValue(
                   properties.Date
                 ),
 
-
-              /*
-              ---------------------------------------------------
-              COVER IMAGE
-              ---------------------------------------------------
-              */
-
               Image:
-                page.cover?.file?.url
-                || page.cover?.external?.url
-                || null,
-
-
-              /*
-              ---------------------------------------------------
-              PAGE CONTENT IMAGES
-              ---------------------------------------------------
-              */
-
-              ContentImages: [],
-
+                page.cover?.file?.url || null,
 
               Hashtag:
                 getPropertyValue(
                   properties.Hashtag
                 ),
 
-
               KW:
                 getPropertyValue(
                   properties.KW
                 ),
-
 
               Location:
                 getPropertyValue(
                   properties.Location
                 ),
 
-
               NAMTANFILM:
                 getPropertyValue(
                   properties.NAMTANFILM
                 ),
 
-
               Type:
                 getPropertyValue(
                   properties.Type
                 ),
-
 
               Year:
                 getPropertyValue(
@@ -650,190 +169,79 @@ jobs:
                 )
 
             };
-
           }
 
-
-          /*
-          =======================================================
-          PROPERTY VALUE
-          =======================================================
-          */
-
-          function getPropertyValue(
-            property
-          ) {
+          function getPropertyValue(property) {
 
             if (!property) {
               return null;
             }
 
-
-            switch (
-              property.type
-            ) {
-
-
-              /*
-              ---------------------------------------------------
-              TITLE
-              ---------------------------------------------------
-              */
+            switch (property.type) {
 
               case "title":
 
                 return (
-
                   property.title
                     ?.map(
                       item =>
                         item.plain_text
                     )
                     .join("")
-                    || null
-
+                  || null
                 );
-
-
-              /*
-              ---------------------------------------------------
-              RICH TEXT
-              ---------------------------------------------------
-              */
 
               case "rich_text":
 
                 return (
-
                   property.rich_text
                     ?.map(
                       item =>
                         item.plain_text
                     )
                     .join("")
-                    || null
-
+                  || null
                 );
-
-
-              /*
-              ---------------------------------------------------
-              SELECT
-              ---------------------------------------------------
-              */
 
               case "select":
 
                 return (
-
                   property.select?.name
                   || null
-
                 );
-
-
-              /*
-              ---------------------------------------------------
-              MULTI SELECT
-              ---------------------------------------------------
-              */
 
               case "multi_select":
 
-                return (
-
-                  property.multi_select
-                    ?.map(
-                      item =>
-                        item.name
-                    )
-                  || []
-
-                );
-
-
-              /*
-              ---------------------------------------------------
-              DATE
-              ---------------------------------------------------
-              */
+                return property.multi_select
+                  ?.map(
+                    item => item.name
+                  ) || [];
 
               case "date":
 
-                if (
-                  !property.date?.start
-                ) {
-
+                if (!property.date?.start) {
                   return null;
-
                 }
 
-
                 return property.date.end
-
                   ? `${property.date.start} → ${property.date.end}`
-
                   : property.date.start;
-
-
-              /*
-              ---------------------------------------------------
-              NUMBER
-              ---------------------------------------------------
-              */
 
               case "number":
 
-                return (
-                  property.number
-                  ?? null
-                );
-
-
-              /*
-              ---------------------------------------------------
-              CHECKBOX
-              ---------------------------------------------------
-              */
+                return property.number ?? null;
 
               case "checkbox":
 
                 return property.checkbox;
 
-
-              /*
-              ---------------------------------------------------
-              URL
-              ---------------------------------------------------
-              */
-
               case "url":
 
-                return (
-                  property.url
-                  || null
-                );
-
-
-              /*
-              ---------------------------------------------------
-              EMAIL
-              ---------------------------------------------------
-              */
+                return property.url || null;
 
               case "email":
 
-                return (
-                  property.email
-                  || null
-                );
-
-
-              /*
-              ---------------------------------------------------
-              FORMULA
-              ---------------------------------------------------
-              */
+                return property.email || null;
 
               case "formula":
 
@@ -841,124 +249,59 @@ jobs:
                   property.formula
                 );
 
-
-              /*
-              ---------------------------------------------------
-              DEFAULT
-              ---------------------------------------------------
-              */
-
               default:
 
                 return null;
-
             }
-
           }
 
-
-          /*
-          =======================================================
-          FORMULA VALUE
-          =======================================================
-          */
-
-          function getFormulaValue(
-            formula
-          ) {
+          function getFormulaValue(formula) {
 
             if (!formula) {
               return null;
             }
 
-
-            switch (
-              formula.type
-            ) {
-
+            switch (formula.type) {
 
               case "string":
 
-                return (
-                  formula.string
-                  || null
-                );
-
+                return formula.string || null;
 
               case "number":
 
-                return (
-                  formula.number
-                  ?? null
-                );
-
+                return formula.number ?? null;
 
               case "boolean":
 
                 return formula.boolean;
 
-
               case "date":
 
-                return (
-                  formula.date?.start
-                  || null
-                );
-
+                return formula.date?.start || null;
 
               default:
 
                 return null;
-
             }
-
           }
 
+          main().catch(error => {
 
-          /*
-          =======================================================
-          RUN
-          =======================================================
-          */
+            console.error(error);
 
-          main().catch(
-            error => {
+            process.exit(1);
 
-              console.error(
-                error
-              );
-
-              process.exit(1);
-
-            }
-          );
-
+          });
           EOF
-
-
-      # -------------------------------------------------------
-      # COMMIT
-      # -------------------------------------------------------
 
       - name: Commit updated events.json
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git config user.name \
-            "github-actions[bot]"
+          git add data/events.json
 
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
-
-          git add \
-            data/events.json
-
-
-          git diff \
-            --cached \
-            --quiet \
-            || git commit \
-            -m "Sync events from Notion"
-
+          git diff --cached --quiet || \
+            git commit -m "Sync events from Notion"
 
           git push
