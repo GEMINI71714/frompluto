@@ -138,6 +138,9 @@ jobs:
               Image:
                 page.cover?.file?.url || null,
 
+              NotionPageId:
+                page.id,
+
               Hashtag:
                 getPropertyValue(
                   properties.Hashtag
