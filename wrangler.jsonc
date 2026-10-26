@@ -1,0 +1,10 @@
+{
+  "name": "ntf",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-11",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "html_handling": "none"
+  }
+}

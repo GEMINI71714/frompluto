@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>From PLUTO — NamtanFilm</title>
+    <meta name="description" content="NamtanFilm Events and Activities.">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="home-page">
+
+<div id="site-header"></div>
+
+<main>
+
+    <!-- HERO -->
+    <section class="hero home-hero">
+        <div class="container hero-inner">
+            <div class="hero-text" style="text-align:center;">
+                <iframe class="youtube-video" src="https://www.youtube.com/embed/L0LOI8v7eWU?autoplay=1&mute=1&loop=1&playlist=L0LOI8v7eWU"
+                title="YouTube video player" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen> </iframe>
+                <div style="text-align:center; margin-top:20px;">
+                    <img src="images/fancon-text.png" alt="NamtanFilmFanCon-text" style="width:400px;">
+                    <a href="https://ntf-fancon.from-pluto.workers.dev/">
+                        <button class="broadway-btn" style="margin-top:20px;">Claim Your Seat</button>
+                    </a>
+                </div>
+            </div>
+            <div class="hero-decoration">
+                 <img src="images/NFFC.png" alt="NamtanFilmFanCon" style="width:700px;">
+            </div>
+        </div>
+    </section>
+    
+    <!-- UPCOMING -->
+    <section class="upcoming-section">
+        <div class="container">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">UPCOMING</span>
+                    <h2>Upcoming Events</h2>
+                </div>
+            </div>
+            <div id="upcomingEvents" class="upcoming-grid"></div>
+        </div>
+    </section>
+</main>
+
+    
+<!-- INSTAGRAM -->
+
+
+
+<!-- EVENT MODAL -->
+<div id="eventModal" class="modal">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+        <button class="modal-close" id="modalClose" aria-label="Close" type="button">
+            ×
+        </button>
+        <div id="modalImage" class="modal-image">
+            <div class="modal-image-placeholder">NF</div>
+        </div>
+
+        <div class="modal-body">
+            <div class="modal-tags">
+                <span id="modalArtist" class="tag"></span>
+                <span id="modalType" class="tag"></span>
+            </div>
+
+            <h2 id="modalTitle"></h2>
+            <div class="modal-info">
+                <div class="info-row">
+                    <span class="info-label">
+                        DATE
+                    </span>
+                    <span id="modalDate"></span>
+                </div>
+
+
+                <div class="info-row">
+                    <span class="info-label">
+                        LOCATION
+                    </span>
+                    <span id="modalLocation"></span>
+                </div>
+
+
+                <div class="info-row">
+                    <span class="info-label">
+                        DESCRIPTION
+                    </span>
+                    <span id="modalDescription"></span>
+                </div>
+            </div>
+
+            <a id="modalLink" class="modal-link hidden" href="#" target="_blank" rel="noopener noreferrer">
+                View Related Link →
+            </a>
+        </div>
+    </div>
+</div>
+
+
+<div id="site-footer"></div>
+
+
+<script src="app.js" defer></script>
+
+</body>
+</html>
+
